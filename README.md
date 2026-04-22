@@ -49,9 +49,18 @@ npm run dev
 
 ## Claude API
 
-The app calls Anthropic directly from the browser using the API key you enter in the form.
+Recommended: use **Proxy Mode** by setting:
 
-For production use, you can move this API call to a secure backend or Firebase function to avoid exposing API keys in client-side requests.
+```bash
+VITE_CLAUDE_PROXY_URL=https://your-backend-or-firebase-function/claude-itinerary
+```
+
+Your proxy endpoint should accept `{ prompt }` and return JSON with either:
+
+- `{ "text": "Day 1: ...\\nDay 2: ..." }`, or
+- Anthropic-style `content` array with text blocks.
+
+Direct browser API key mode is available only for quick internal testing and is less secure.
 
 ## Build
 

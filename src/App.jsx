@@ -182,6 +182,8 @@ const buildItineraryRows = (itinerary) => {
 function App() {
   const [form, setForm] = useState(defaultForm)
   const [savedQuotes, setSavedQuotes] = useState(readSaved)
+  const [claudeMode, setClaudeMode] = useState('proxy')
+  const [claudeProxyUrl, setClaudeProxyUrl] = useState(import.meta.env.VITE_CLAUDE_PROXY_URL || '')
   const [claudeApiKey, setClaudeApiKey] = useState('')
   const [loadingItinerary, setLoadingItinerary] = useState(false)
   const [status, setStatus] = useState('Ready')
@@ -262,11 +264,6 @@ function App() {
   }
 
   const generateItinerary = async () => {
-    if (!claudeApiKey.trim()) {
-      setStatus('Add your Claude API key to generate itinerary.')
-      return
-    }
-
     setLoadingItinerary(true)
     setStatus('Generating itinerary with Claude...')
 
@@ -281,30 +278,47 @@ Day 1: ...
 Day 2: ...`
 
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': claudeApiKey.trim(),
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: 'claude-3-5-sonnet-latest',
-          max_tokens: 900,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      })
+      let response
+      if (claudeMode === 'proxy') {
+        if (!claudeProxyUrl.trim()) {
+          throw new Error('Set VITE_CLAUDE_PROXY_URL or enter Proxy URL.')
+        }
+        response = await fetch(claudeProxyUrl.trim(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt }),
+        })
+      } else {
+        if (!claudeApiKey.trim()) {
+          throw new Error('Add your Claude API key for direct mode.')
+        }
+        response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': claudeApiKey.trim(),
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model: 'claude-3-5-sonnet-20241022',
+            max_tokens: 900,
+            messages: [{ role: 'user', content: prompt }],
+          }),
+        })
+      }
 
       if (!response.ok) {
         throw new Error(`Claude request failed (${response.status})`)
       }
 
       const data = await response.json()
-      const text = (data?.content || [])
-        .filter((item) => item.type === 'text')
-        .map((item) => item.text)
-        .join('\n')
-        .trim()
+      const text =
+        data?.text ||
+        (data?.content || [])
+          .filter((item) => item.type === 'text')
+          .map((item) => item.text)
+          .join('\n')
+          .trim()
 
       updateField('itinerary', text)
       setStatus('Itinerary generated successfully.')
@@ -693,12 +707,24 @@ Cancellation Policy:\n${form.cancellationPolicy}`
           <section className="card grid">
             <h2>AI Itinerary Generator (Claude)</h2>
             <div className="ai-row">
-              <input
-                type="password"
-                placeholder="Claude API Key"
-                value={claudeApiKey}
-                onChange={(e) => setClaudeApiKey(e.target.value)}
-              />
+              <select value={claudeMode} onChange={(e) => setClaudeMode(e.target.value)}>
+                <option value="proxy">Proxy Mode (Recommended)</option>
+                <option value="direct">Direct Browser Mode</option>
+              </select>
+              {claudeMode === 'proxy' ? (
+                <input
+                  placeholder="Proxy URL (e.g. /api/claude-itinerary)"
+                  value={claudeProxyUrl}
+                  onChange={(e) => setClaudeProxyUrl(e.target.value)}
+                />
+              ) : (
+                <input
+                  type="password"
+                  placeholder="Claude API Key (insecure in browser)"
+                  value={claudeApiKey}
+                  onChange={(e) => setClaudeApiKey(e.target.value)}
+                />
+              )}
               <button onClick={generateItinerary} disabled={loadingItinerary}>
                 {loadingItinerary ? 'Generating...' : 'Generate Itinerary'}
               </button>
